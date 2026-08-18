@@ -5,6 +5,7 @@
  "autoname": "UAID-.#####",
  "creation": "2026-08-11 14:16:24.739518",
  "doctype": "DocType",
+ "document_type": "Setup",
  "engine": "InnoDB",
  "field_order": [
   "user",
@@ -31,7 +32,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-11 14:20:05.621401",
+ "modified": "2026-08-18 15:18:36.791388",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "User Authentication",
@@ -53,6 +54,7 @@
  ],
  "row_format": "Dynamic",
  "rows_threshold_for_grid_search": 20,
+ "show_name_in_global_search": 1,
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": []

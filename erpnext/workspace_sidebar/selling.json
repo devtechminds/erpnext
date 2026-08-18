@@ -160,6 +160,17 @@
    "collapsible": 1,
    "indent": 0,
    "keep_closed": 0,
+   "label": "User Authentication",
+   "link_to": "User Authentication",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
    "label": "Loyalty Program",
    "link_to": "Loyalty Program",
    "link_type": "DocType",
@@ -698,7 +709,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-04-28 14:38:37.179705",
+ "modified": "2026-08-18 15:54:56.456690",
  "modified_by": "Administrator",
  "module": "Selling",
  "module_onboarding": "Selling Onboarding",

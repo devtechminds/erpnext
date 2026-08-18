@@ -1,95 +1,73 @@
-// your_app/public/js/pos_discount_modal.js
+// your_custom_app/public/js/pos_custom_discount.js
 
-frappe.provide('erpnext.POS');
+$(document).ready(function() {
+    localStorage.setItem('user_pin_verified', 0);
+    // Delegates click event dynamically for any .add-discount-wrapper on the screen
+    $(document).on('click', '.add-discount-wrapper', function (e) {
+        const is_verified = localStorage.getItem('user_pin_verified');
+        if (is_verified === '0' || is_verified === null) {
+            // Stop default action and open PIN dialog
+            e.preventDefault();
+            e.stopPropagation();
+            
+            show_pin_dialog();
+        } else {
+            // PIN is already verified (1), allow normal discount action
+            console.log("Discount opened, user verified.");
+        }   
+    });
+    
+});
+function check_and_prompt_pin() {
+    // 1. Get flag state from localStorage
+    const is_verified = localStorage.getItem('user_pin_verified');
 
-erpnext.POS.DiscountModal = class DiscountModal {
-    constructor(cartInstance) {
-        console.log('[DiscountModal] Module initialized with Cart Instance:', cartInstance);
-        this.cart = cartInstance;
+    // 2. Open dialog if unverified (0 or null)
+    if (is_verified === '0' || is_verified === null) {
+        show_pin_dialog();
     }
+}
 
-    /**
-     * Opens the Discount Dialog
-     */
-    open() {
-        console.log('[DiscountModal] open() method triggered.');
-
-        // Step 1: Verify Cart and Form Availability
-        const frm = this.cart.events ? this.cart.events.get_frm() : null;
-
-        if (!frm || !frm.doc) {
-            console.error('[DiscountModal] Active form/doc not found!');
-            frappe.msgprint(__('POS Invoice form is not active.'));
-            return;
-        }
-
-        const currentDiscount = frm.doc.additional_discount_percentage || 0;
-        console.log('[DiscountModal] Current Discount Percentage:', currentDiscount);
-
-        // Step 2: Create Dialog
-        const dialog = new frappe.ui.Dialog({
-            title: __('Apply Discount Percentage'),
-            fields: [
-                {
-                    label: __('Discount (%)'),
-                    fieldname: 'discount_percentage',
-                    fieldtype: 'Percent',
-                    default: currentDiscount,
-                    reqd: 1,
-                    description: __('Enter a value between 0 and 100')
-                }
-            ],
-            primary_action_label: __('Apply Discount'),
-            primary_action: (values) => {
-                console.log('[DiscountModal] Primary action clicked with values:', values);
-                this.applyDiscount(values.discount_percentage, dialog, frm);
+function show_pin_dialog() {
+    const dialog = new frappe.ui.Dialog({
+        title: __('Enter Security PIN'),
+        fields: [
+            {
+                label: __('PIN'),
+                fieldname: 'pin',
+                fieldtype: 'Password',
+                reqd: 1,
+                description: __('Please enter your 4-digit PIN to continue')
             }
-        });
+        ],
+        primary_action_label: __('Verify'),
+        primary_action(values) {
+            frappe.call({
+                method: "erpnext.accounts.doctype.user_authentication.user_authentication.validate_pin",
+                args: {
+                    user: frappe.session.user,
+                    pin: values.pin // pass entered pin from dialog field
+                },
+                freeze: true,
+                freeze_message: __('Verifying PIN...'),
+                callback: function (r) {
+                    if (r.message === true) {
+                        frappe.show_alert({ message: __('PIN Verified'), indicator: 'green' });
+                        localStorage.setItem('user_pin_verified', '1');
+                        dialog.hide();
 
-        // Step 3: Show Dialog
-        dialog.show();
-        console.log('[DiscountModal] Modal dialog shown successfully.');
-    }
-
-    /**
-     * Applies the discount to the POS Invoice Doc
-     */
-    applyDiscount(discountValue, dialog, frm) {
-        const discount = parseFloat(discountValue);
-
-        console.log('[DiscountModal] Validating discount value:', discount);
-
-        // Validation Check
-        if (isNaN(discount) || discount < 0 || discount > 100) {
-            console.warn('[DiscountModal] Invalid discount entered:', discount);
-            frappe.msgprint(__('Please enter a valid percentage between 0 and 100.'));
-            return;
-        }
-
-        console.log(`[DiscountModal] Updating additional_discount_percentage to ${discount}% on Doc: ${frm.doc.name}`);
-
-        // Update Doc Value
-        frappe.model.set_value(frm.doc.doctype, frm.doc.name, 'additional_discount_percentage', discount)
-            .then(() => {
-                console.log('[DiscountModal] Set value completed. Refreshing totals UI...');
-
-                // Recalculate and update cart totals
-                if (typeof this.cart.update_totals_section === 'function') {
-                    this.cart.update_totals_section(frm.doc);
-                    console.log('[DiscountModal] Cart totals refreshed.');
+                        // Re-trigger click so the discount control opens automatically
+                        $('.add-discount-wrapper').trigger('click');
+                    } else {
+                        frappe.msgprint(__('Invalid PIN. Please try again.'));
+                    }
                 }
-
-                dialog.hide();
-
-                // Alert notification
-                frappe.show_alert({
-                    message: __('Discount of {0}% applied successfully!', [discount]),
-                    indicator: 'green'
-                }, 5);
-            })
-            .catch((err) => {
-                console.error('[DiscountModal] Error applying discount:', err);
-                frappe.msgprint(__('Failed to apply discount. Check console logs for details.'));
             });
-    }
-};
+        }
+    });
+
+    // Make dialog un-closable until valid PIN is entered (optional)
+    dialog.no_cancel();
+    dialog.show();
+}
+
