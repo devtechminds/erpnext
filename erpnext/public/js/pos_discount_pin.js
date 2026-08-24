@@ -5,6 +5,7 @@ $(document).ready(function() {
     // Delegates click event dynamically for any .add-discount-wrapper on the screen
     $(document).on('click', '.add-discount-wrapper', function (e) {
         const is_verified = localStorage.getItem('user_pin_verified');
+        //alert(is_verified);
         if (is_verified === '0' || is_verified === null) {
             // Stop default action and open PIN dialog
             e.preventDefault();
@@ -28,8 +29,21 @@ function check_and_prompt_pin() {
     }
 }
 
+// Keep track of active dialog instance globally/module-level
+let pin_dialog = null;
+
 function show_pin_dialog() {
-    const dialog = new frappe.ui.Dialog({
+    // 1. Force remove any leftover Frappe modals and black backdrops from DOM
+    $('.modal-backdrop').remove();
+    $('.modal').modal('hide');
+
+    if (pin_dialog) {
+        try { pin_dialog.hide(); } catch(e) {}
+        if (pin_dialog.$wrapper) pin_dialog.$wrapper.remove();
+        pin_dialog = null;
+    }
+
+    pin_dialog = new frappe.ui.Dialog({
         title: __('Enter Security PIN'),
         fields: [
             {
@@ -46,7 +60,7 @@ function show_pin_dialog() {
                 method: "erpnext.accounts.doctype.user_authentication.user_authentication.validate_pin",
                 args: {
                     user: frappe.session.user,
-                    pin: values.pin // pass entered pin from dialog field
+                    pin: values.pin
                 },
                 freeze: true,
                 freeze_message: __('Verifying PIN...'),
@@ -54,20 +68,34 @@ function show_pin_dialog() {
                     if (r.message === true) {
                         frappe.show_alert({ message: __('PIN Verified'), indicator: 'green' });
                         localStorage.setItem('user_pin_verified', '1');
-                        dialog.hide();
 
-                        // Re-trigger click so the discount control opens automatically
-                        $('.add-discount-wrapper').trigger('click');
+                        // 2. Hide dialog & cleanup DOM manually
+                        pin_dialog.hide();
+                        if (pin_dialog.$wrapper) {
+                            pin_dialog.$wrapper.remove();
+                        }
+                        $('.modal-backdrop').remove(); // Clear lingering dark overlay
+                        $('body').removeClass('modal-open'); // Restore scrolling
+
+                        // 3. Open discount control directly instead of triggering a click (prevents re-opening PIN dialog)
+                        if (typeof show_discount_control === 'function') {
+                            show_discount_control();
+                        } else if (me && typeof me.show_discount_control === 'function') {
+                            me.show_discount_control();
+                        } else {
+                            // Fallback: Ensure flag is set before clicking wrapper
+                            $('.add-discount-wrapper').off('click.pin_check'); 
+                            $('.add-discount-wrapper').trigger('click');
+                        }
                     } else {
                         frappe.msgprint(__('Invalid PIN. Please try again.'));
+                        pin_dialog.set_value('pin', '');
                     }
                 }
             });
         }
     });
 
-    // Make dialog un-closable until valid PIN is entered (optional)
-    dialog.no_cancel();
-    dialog.show();
+    pin_dialog.no_cancel();
+    pin_dialog.show();
 }
-
