@@ -394,136 +394,144 @@ erpnext.PointOfSale.ItemCart = class {
 		}
 	}
 
-	show_discount_control() {
-		this.$add_discount_elem.css({ padding: "0px", border: "none" });
-		this.$add_discount_elem.html(`<div class="add-discount-field"></div>`);
-		const me = this;
+show_discount_control() {
+    this.$add_discount_elem.css({ padding: "0px", border: "none" });
+    this.$add_discount_elem.html(`<div class="add-discount-field"></div>`);
+    const me = this;
 
-		this.is_updating_discount = false;
+    this.is_updating_discount = false;
 
-		// Helper: Get base total before discount
-		const get_cart_total = () => {
-			const frm = me.events?.get_frm ? me.events.get_frm() : cur_frm;
-			const net_total = flt(frm?.doc?.net_total);
-			const existing_discount = flt(frm?.doc?.discount_amount);
-			return (net_total + existing_discount) || flt(frm?.doc?.grand_total) || 1;
-		};
+    // Helper: Get base total before discount
+    const get_cart_total = () => {
+        const frm = me.events?.get_frm ? me.events.get_frm() : cur_frm;
+        const net_total = flt(frm?.doc?.net_total);
+        const existing_discount = flt(frm?.doc?.discount_amount);
+        return (net_total + existing_discount) || flt(frm?.doc?.grand_total) || 1;
+    };
 
-		// 1. Discount Percentage Control
-		this.discount_field = frappe.ui.form.make_control({
-			df: {
-				label: __("Discount (%)"),
-				fieldtype: "Float",
-				precision: 2,
-				placeholder: __("Enter discount %"),
-				input_class: "input-xs",
-			},
-			parent: this.$add_discount_elem.find(".add-discount-field"),
-			render_input: true,
-		});
+    // Helper: Core method to update document and trigger backend recalculations
+    const apply_and_recalculate = (discount_amount, discount_percentage) => {
+        const frm = me.events?.get_frm ? me.events.get_frm() : cur_frm;
+        if (!frm) return;
 
-		// 2. Discount Amount Control
-		this.discount_amount_field = frappe.ui.form.make_control({
-			df: {
-				label: __(""),
-				fieldtype: "Currency",
-				placeholder: __("Enter discount amount"),
-				input_class: "input-xs",
-			},
-			parent: this.$add_discount_elem.find(".add-discount-field"),
-			render_input: true,
-		});
+        // 1. Force values directly onto local doc instance
+        frm.doc.discount_amount = flt(discount_amount);
+        frm.doc.additional_discount_percentage = flt(discount_percentage);
 
-		// 3. LIVE KEYUP: Typing in Percentage Field -> Calculates Discount Amount
-		if (this.discount_field && this.discount_field.$input) {
-			const debounced_percentage_keyup = frappe.utils.debounce(function (input_elem) {
-				if (me.is_updating_discount) return;
-				me.is_updating_discount = true;
+        // 2. Set model values
+        frappe.model.set_value(frm.doc.doctype, frm.doc.name, {
+            "discount_amount": flt(discount_amount),
+            "additional_discount_percentage": flt(discount_percentage)
+        }).then(() => {
+            // Re-enforce percentage on doc so ERPNext doesn't clear it
+            frm.doc.additional_discount_percentage = flt(discount_percentage);
 
-				const frm = me.events?.get_frm ? me.events.get_frm() : cur_frm;
-				let typed_percentage = flt($(input_elem).val());
+            // 3. Trigger ERPNext's calculation engine
+            if (frm.cscript && frm.cscript.calculate_taxes_and_totals) {
+                frm.cscript.calculate_taxes_and_totals(frm.doc);
+            } else if (frm.script_manager) {
+                frm.script_manager.trigger("discount_amount");
+            }
 
-				if (typed_percentage > 100) {
-					typed_percentage = 100;
-					$(input_elem).val(100);
-				}
+            // 4. Force POS cart UI update
+            if (me.wrapper && me.wrapper.pos_controller) {
+                if (me.wrapper.pos_controller.cart) {
+                    me.wrapper.pos_controller.cart.update_totals();
+                } else {
+                    me.wrapper.pos_controller.update_totals();
+                }
+            } else if (me.events?.discount_amount_changed) {
+                me.events.discount_amount_changed(discount_amount);
+            }
 
-				const cart_total = get_cart_total();
-				const calculated_amount = flt((cart_total * typed_percentage) / 100, 2);
+            me.is_updating_discount = false;
+        });
+    };
 
-				// Sync Amount Input Field UI
-				if (me.discount_amount_field) {
-					me.discount_amount_field.set_value(calculated_amount);
-				}
+    // 1. Discount Percentage Control
+    this.discount_field = frappe.ui.form.make_control({
+        df: {
+            label: __("Discount (%)"),
+            fieldtype: "Float",
+            precision: 2,
+            placeholder: __("Enter discount %"),
+            input_class: "input-xs",
+        },
+        parent: this.$add_discount_elem.find(".add-discount-field"),
+        render_input: true,
+    });
 
-				// Model Update (Apply via percentage)
-				frappe.model.set_value(frm.doc.doctype, frm.doc.name, {
-					"additional_discount_percentage": typed_percentage,
-					"discount_amount": calculated_amount
-				}).then(() => {
-					if (me.events?.discount_changed) {
-						me.events.discount_changed(calculated_amount, typed_percentage);
-					}
-					if (me.wrapper && me.wrapper.pos_controller) {
-						me.wrapper.pos_controller.update_totals();
-					}
-					me.is_updating_discount = false;
-				});
-			}, 300);
+    // 2. Discount Amount Control
+    this.discount_amount_field = frappe.ui.form.make_control({
+        df: {
+            label: __(""),
+            fieldtype: "Currency",
+            placeholder: __("Enter discount amount"),
+            input_class: "input-xs",
+        },
+        parent: this.$add_discount_elem.find(".add-discount-field"),
+        render_input: true,
+    });
 
-			this.discount_field.$input.on("keyup", function () {
-				debounced_percentage_keyup(this);
-			});
-		}
+    // 3. LIVE KEYUP: Percentage Field
+    if (this.discount_field && this.discount_field.$input) {
+        const debounced_percentage_keyup = frappe.utils.debounce(function (input_elem) {
+            if (me.is_updating_discount) return;
+            me.is_updating_discount = true;
 
-		// 4. LIVE KEYUP: Typing in Amount Field -> Calculates Percentage
-		if (this.discount_amount_field && this.discount_amount_field.$input) {
-			const debounced_amount_keyup = frappe.utils.debounce(function (input_elem) {
-				if (me.is_updating_discount) return;
-				me.is_updating_discount = true;
+            let typed_percentage = flt($(input_elem).val());
+            if (typed_percentage > 100) {
+                typed_percentage = 100;
+                $(input_elem).val(100);
+            }
 
-				const frm = me.events?.get_frm ? me.events.get_frm() : cur_frm;
-				const typed_amount = flt($(input_elem).val());
-				const cart_total = get_cart_total();
+            const cart_total = get_cart_total();
+            const calculated_amount = flt((cart_total * typed_percentage) / 100, 2);
 
-				let display_percentage = 0;
-				if (cart_total > 0 && typed_amount > 0) {
-					display_percentage = flt((typed_amount / cart_total) * 100, 2);
-				}
+            if (me.discount_amount_field) {
+                me.discount_amount_field.set_value(calculated_amount);
+            }
 
-				// Sync Percentage Field UI
-				if (me.discount_field) {
-					me.discount_field.set_value(display_percentage);
-					if (me.discount_field.$input) {
-						me.discount_field.$input.val(display_percentage ? display_percentage.toFixed(2) : "");
-					}
-				}
+            apply_and_recalculate(calculated_amount, typed_percentage);
+        }, 300);
 
-				// Model Update (Flat Amount)
-				frappe.model.set_value(frm.doc.doctype, frm.doc.name, {
-					"additional_discount_percentage": 0,
-					"discount_amount": typed_amount
-				}).then(() => {
-					if (me.events?.discount_amount_changed) {
-						me.events.discount_amount_changed(typed_amount);
-					} else if (me.events?.discount_changed) {
-						me.events.discount_changed(typed_amount, 0);
-					}
-					if (me.wrapper && me.wrapper.pos_controller) {
-						me.wrapper.pos_controller.update_totals();
-					}
-					me.is_updating_discount = false;
-				});
-			}, 300);
+        this.discount_field.$input.on("keyup", function () {
+            debounced_percentage_keyup(this);
+        });
+    }
 
-			this.discount_amount_field.$input.on("keyup", function () {
-				debounced_amount_keyup(this);
-			});
-		}
+    // 4. LIVE KEYUP: Amount Field
+    if (this.discount_amount_field && this.discount_amount_field.$input) {
+        const debounced_amount_keyup = frappe.utils.debounce(function (input_elem) {
+            if (me.is_updating_discount) return;
+            me.is_updating_discount = true;
 
-		this.discount_field.toggle_label(false);
-		this.discount_field.set_focus();
-	}
+            const typed_amount = flt($(input_elem).val());
+            const cart_total = get_cart_total();
+
+            let display_percentage = 0;
+            if (cart_total > 0 && typed_amount > 0) {
+                display_percentage = flt((typed_amount / cart_total) * 100, 2);
+            }
+
+            if (me.discount_field) {
+                me.discount_field.set_value(display_percentage);
+                if (me.discount_field.$input) {
+                    me.discount_field.$input.val(display_percentage ? display_percentage.toFixed(2) : "");
+                }
+            }
+
+            apply_and_recalculate(typed_amount, display_percentage);
+        }, 300);
+
+        this.discount_amount_field.$input.on("keyup", function () {
+            debounced_amount_keyup(this);
+        });
+    }
+
+    this.discount_field.toggle_label(false);
+    this.discount_field.set_focus();
+}
 
 	hide_discount_control(discount) {
 		if (!flt(discount)) {
