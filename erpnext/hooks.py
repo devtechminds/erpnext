@@ -22,7 +22,7 @@ add_to_apps_screen = [
 
 develop_version = "15.x.x-develop"
 
-app_include_js = ["erpnext.bundle.js","/assets/erpnext/js/pos_discount_pin.js"]
+app_include_js = "erpnext.bundle.js"
 app_include_css = "erpnext.bundle.css"
 web_include_css = "erpnext-web.bundle.css"
 email_css = "email_erpnext.bundle.css"
@@ -41,7 +41,6 @@ doctype_js = {
 	"Event": "public/js/event.js",
 	"Newsletter": "public/js/newsletter.js",
 	"Contact": "public/js/contact.js",
-    "POS Invoice": "public/js/pos_discount_pin.js"
 }
 doctype_list_js = {
 	"Code List": [
@@ -52,7 +51,7 @@ doctype_list_js = {
 	],
 }
 
-page_js = {"print": "public/js/print.js","point-of-sale": "public/js/pos_discount_pin.js"}
+page_js = {"print": "public/js/print.js"}
 
 extend_doctype_class = {"Address": "erpnext.accounts.custom.address.ERPNextAddress"}
 
