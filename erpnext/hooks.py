@@ -709,5 +709,10 @@ repost_allowed_doctypes = [
 	"Payment Entry",
 	"Purchase Receipt",
 ]
+
+fixtures = [
+    "Client Script",
+    "Server Script"
+]
 # your_custom_app/hooks.py
 
