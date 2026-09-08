@@ -21,9 +21,14 @@ class UserAuthentication(Document):
 	pass
 
 @frappe.whitelist()
-def validate_pin(user, pin):
-    """API endpoint to check if PIN is valid."""
-    stored_pin = frappe.db.get_value("User Authentication", {"user": user}, "pin")
-    if not stored_pin:
-        frappe.throw(_("No User Authentication record found for this user."))
-    return str(stored_pin).strip() == str(pin).strip()
+def validate_pin(pin):
+    """API endpoint to check if a PIN exists in the User Authentication table."""
+    if not pin:
+        frappe.throw(_("Please provide a PIN to validate."))
+        
+    cleaned_pin = str(pin).strip()
+    
+    # Check if any record matches the given PIN
+    pin_exists = frappe.db.exists("User Authentication", {"pin": cleaned_pin})
+    
+    return bool(pin_exists)
